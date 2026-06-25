@@ -110,11 +110,14 @@ __fz_open_at_line() {
   esac
 }
 
-export -f __fz_has
-export -f __fz_err
-export -f __fz_file_preview
-export -f __fz_open_at_line
+if [[ -z "${ZSH_VERSION:-}" ]]; then
+  export -f __fz_has
+  export -f __fz_err
+  export -f __fz_file_preview
+  export -f __fz_open_at_line
+fi
 
+unalias fzls fzinfo fzcomp fzcd fzclip fzvs fzless fzmore fznano fzdiff fzh fzgc fzgrep fzg fzps fzhelp 2>/dev/null || true
 
 fzls() {
   usage() {
@@ -843,7 +846,9 @@ __fzgrep_preview() {
   fi
 }
 
-export -f __fzgrep_preview
+if [[ -z "${ZSH_VERSION:-}" ]]; then
+  export -f __fzgrep_preview
+fi
 
 fzgrep() {
   usage() {
@@ -1063,9 +1068,11 @@ __fzps_preview() {
   fi
 }
 
-export -f __fzps_sort_arg
-export -f __fzps_list
-export -f __fzps_preview
+if [[ -z "${ZSH_VERSION:-}" ]]; then
+  export -f __fzps_sort_arg
+  export -f __fzps_list
+  export -f __fzps_preview
+fi
 
 fzps() {
   usage() {

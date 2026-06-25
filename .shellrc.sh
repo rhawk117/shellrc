@@ -69,6 +69,8 @@ __source_shellrc_files() {
     }
 
     file_path="$RC_LIBRARY/$file"
+    echo "$file_path"
+
     [[ -e "$file_path" ]] || {
       printf '[warn] shellrc file not found: %s\n' "$file_path" >&2
       continue
@@ -129,23 +131,35 @@ __bootstrap_platform() {
 
   __set_gitbash_prompt() {
     local branch
-    local blue
-    local red
-    local white
-    local yellow
-    local dim
-    local reset
-
     branch="$(__git_branch)"
 
-    blue='\[\e[1;34m\]'
-    red='\[\e[1;31m\]'
-    white='\[\e[1;37m\]'
-    yellow='\[\e[33m\]'
-    dim='\[\e[90m\]'
-    reset='\[\e[0m\]'
+    local blue='\[\e[1;34m\]'
+    local green='\[\e[1;32m\]'
+    local red='\[\e[1;31m\]'
+    local white='\[\e[1;37m\]'
+    local yellow='\[\e[33m\]'
+    local dim='\[\e[90m\]'
+    local reset='\[\e[0m\]'
 
-    PS1="${blue}\u${reset} ${white}\w${reset}${yellow}${branch}${reset} ${dim}\D{%I:%M:%S %p}${reset}"$'\n'"${red}❯${reset} "
+    local user_str="${USER:-${LOGNAME:-${USERNAME}}}"
+    local host_str="${HOSTNAME%%.*}"
+    local path_disp="${PWD/#$HOME/~}"
+    local date_str
+    date_str="$(date +'%I:%M:%S %p')"
+    local cols="${COLUMNS:-80}"
+
+    local left="${user_str}@${host_str} | ${path_disp}${branch} "
+    local right=" ${date_str}"
+    local fill_len=$(( cols - ${#left} - ${#right} ))
+
+    local filler=""
+    if (( fill_len > 0 )); then
+      local spaces
+      printf -v spaces '%*s' "$fill_len" ''
+      filler="${spaces// /·}"
+    fi
+
+    PS1="${blue}${user_str}${reset}${dim}@${reset}${green}${host_str}${reset} ${dim}|${reset} ${white}\w${reset}${yellow}${branch}${reset} ${dim}${filler} ${date_str}${reset}"$'\n'"${red}❯${reset} "
   }
 
   export PROMPT_COMMAND=__set_gitbash_prompt

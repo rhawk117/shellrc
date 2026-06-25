@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 # ~/.shellrc.d/.shell_utils.sh
 
@@ -56,6 +56,8 @@ rc_fatal()   { _log "$RED"     "FATAL"   stderr "$@"; return 1; }
 
 
 # gitsnap: add, commit with -m, and optional --pull
+unalias gitsnap gitfeat upby rglob gr gri bkmark 2>/dev/null || true
+
 gitsnap() {
 
   usage() {
