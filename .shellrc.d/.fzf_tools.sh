@@ -8,6 +8,13 @@
 # Optional:
 #   bat, code, lsof, pstree, pwdx
 
+_FZTOOLS_SOURCE="${BASH_SOURCE[0]:-$0}"
+export _FZTOOLS_SOURCE
+
+# Directories pruned from all file/dir searches. Set before sourcing to override.
+: "${FZ_IGNORE_DIRS:=.git node_modules .svn .hg __pycache__ .cache .tox .mypy_cache .pytest_cache .venv venv dist build .next .nuxt target}"
+export FZ_IGNORE_DIRS
+
 
 __fz_has() {
   command -v "$1" >/dev/null 2>&1
@@ -28,6 +35,31 @@ __fz_require() {
   done
 
   return "$missing"
+}
+
+__fz_find() {
+  # __fz_find <root> [find-conditions...]
+  # Prunes FZ_IGNORE_DIRS before applying the supplied conditions.
+  local root="${1:-.}"
+  shift
+
+  if [[ -z "${FZ_IGNORE_DIRS:-}" ]]; then
+    find "$root" "$@" -print 2>/dev/null
+    return
+  fi
+
+  local dirs prune=()
+  read -ra dirs <<< "$FZ_IGNORE_DIRS"
+
+  if [[ ${#dirs[@]} -gt 0 ]]; then
+    prune=( "(" "-name" "${dirs[0]}" )
+    for (( i=1; i<${#dirs[@]}; i++ )); do
+      prune+=( "-o" "-name" "${dirs[$i]}" )
+    done
+    prune+=( ")" "-prune" "-o" )
+  fi
+
+  find "$root" "${prune[@]}" "$@" -print 2>/dev/null
 }
 
 __fz_file_preview() {
@@ -56,13 +88,13 @@ __fz_select_file() {
   local lines="${2:-50}"
   local root="${3:-.}"
 
-  find "$root" -type f 2>/dev/null |
+  __fz_find "$root" -type f |
     fzf \
       --height=80% \
       --border \
       --info=inline \
       --prompt="$prompt" \
-      --preview="__fz_file_preview {} $lines" \
+      --preview="source \"$_FZTOOLS_SOURCE\"; __fz_file_preview {} $lines" \
       --preview-window=right:60%:wrap
 }
 
@@ -113,6 +145,7 @@ __fz_open_at_line() {
 if [[ -z "${ZSH_VERSION:-}" ]]; then
   export -f __fz_has
   export -f __fz_err
+  export -f __fz_find
   export -f __fz_file_preview
   export -f __fz_open_at_line
 fi
@@ -201,21 +234,21 @@ EOF
     return 1
   }
 
-  local find_args=("$directory")
+  local action_args=()
 
   if [[ "$include_hidden" == false ]]; then
-    find_args+=("!" -path "*/.*")
+    action_args+=("!" -path "*/.*")
   fi
 
-  find_args+=(-type "$type" -name "$name")
+  action_args+=(-type "$type" -name "$name")
 
-  find "${find_args[@]}" 2>/dev/null |
+  __fz_find "$directory" "${action_args[@]}" |
     fzf -m \
       --height=80% \
       --border \
       --info=inline \
       --header="Select entries. Preview: first $lines lines" \
-      --preview="__fz_file_preview {} $lines" \
+      --preview="source \"$_FZTOOLS_SOURCE\"; __fz_file_preview {} $lines" \
       --preview-window=right:55%:border-left:wrap
 }
 
@@ -288,7 +321,7 @@ EOF
     return 1
   }
 
-  find "$directory" -type "$type" -name "$name" 2>/dev/null |
+  __fz_find "$directory" -type "$type" -name "$name" |
     fzf -m \
       --height=80% \
       --border \
@@ -384,7 +417,7 @@ EOF
   }
 
   dir=$(
-    find "$root" -type d 2>/dev/null |
+    __fz_find "$root" -type d |
       fzf \
         --height=70% \
         --border \
@@ -505,13 +538,13 @@ EOF
 
   local target
   target=$(
-    find "$directory" -type "$target_type" 2>/dev/null |
+    __fz_find "$directory" -type "$target_type" |
       fzf \
         --height=80% \
         --border \
         --info=inline \
         --prompt="$prompt" \
-        --preview="__fz_file_preview {} 60" \
+        --preview="source \"$_FZTOOLS_SOURCE\"; __fz_file_preview {} 60" \
         --preview-window=right:60%:wrap
   )
 
@@ -665,7 +698,7 @@ EOF
   }
 
   selected_file=$(
-    find . -type f -not -path '*/.*' 2>/dev/null |
+    __fz_find "." -not -path "*/.*" -type f |
       fzf \
         --height=90% \
         --border \
@@ -865,7 +898,7 @@ Options:
       --directory DIR     Same as --dir
   --vs                    Open selection in VS Code instead of nano
   --hidden                Include hidden file names
-  --no-ignore-git         Search inside .git too, because chaos apparently has fans
+  --no-ignore             Disable FZ_IGNORE_DIRS exclusions (search everywhere)
 
 Examples:
   fzgrep "TODO"
@@ -906,7 +939,7 @@ EOF
         include_hidden=true
         shift
         ;;
-      --no-ignore-git)
+      --no-ignore|--no-ignore-git)
         ignore_git=false
         shift
         ;;
@@ -945,7 +978,9 @@ EOF
   fi
 
   if [[ "$ignore_git" == true ]]; then
-    grep_args+=(--exclude-dir=.git)
+    for dir in ${FZ_IGNORE_DIRS:-}; do
+      grep_args+=(--exclude-dir="$dir")
+    done
   fi
 
   if [[ "$include_hidden" == false ]]; then
@@ -964,7 +999,7 @@ EOF
         --with-nth=1,2,3.. \
         --prompt="grep: " \
         --header="Enter selects. Preview shows nearest section header and match context." \
-        --preview="__fzgrep_preview {1} {2}" \
+        --preview="source \"$_FZTOOLS_SOURCE\"; __fzgrep_preview {1} {2}" \
         --preview-window=right:65%:border-left:wrap
   )
 
@@ -1164,15 +1199,15 @@ EOF
         --no-sort \
         --header-lines=1 \
         --prompt="processes [$sort]: " \
-        --preview="__fzps_preview {1}" \
+        --preview="source \"$_FZTOOLS_SOURCE\"; __fzps_preview {1}" \
         --preview-window=right:65%:border-left:wrap \
-        --bind="ctrl-p:reload(__fzps_list pid '$user_filter')+change-prompt(processes [pid]: )" \
-        --bind="ctrl-o:reload(__fzps_list ppid '$user_filter')+change-prompt(processes [ppid]: )" \
-        --bind="ctrl-u:reload(__fzps_list user '$user_filter')+change-prompt(processes [user]: )" \
-        --bind="ctrl-c:reload(__fzps_list cpu '$user_filter')+change-prompt(processes [cpu]: )" \
-        --bind="ctrl-m:reload(__fzps_list mem '$user_filter')+change-prompt(processes [mem]: )" \
-        --bind="ctrl-t:reload(__fzps_list time '$user_filter')+change-prompt(processes [time]: )" \
-        --bind="ctrl-a:reload(__fzps_list cmd '$user_filter')+change-prompt(processes [cmd]: )"
+        --bind="ctrl-p:reload(source \"$_FZTOOLS_SOURCE\"; __fzps_list pid '$user_filter')+change-prompt(processes [pid]: )" \
+        --bind="ctrl-o:reload(source \"$_FZTOOLS_SOURCE\"; __fzps_list ppid '$user_filter')+change-prompt(processes [ppid]: )" \
+        --bind="ctrl-u:reload(source \"$_FZTOOLS_SOURCE\"; __fzps_list user '$user_filter')+change-prompt(processes [user]: )" \
+        --bind="ctrl-c:reload(source \"$_FZTOOLS_SOURCE\"; __fzps_list cpu '$user_filter')+change-prompt(processes [cpu]: )" \
+        --bind="ctrl-m:reload(source \"$_FZTOOLS_SOURCE\"; __fzps_list mem '$user_filter')+change-prompt(processes [mem]: )" \
+        --bind="ctrl-t:reload(source \"$_FZTOOLS_SOURCE\"; __fzps_list time '$user_filter')+change-prompt(processes [time]: )" \
+        --bind="ctrl-a:reload(source \"$_FZTOOLS_SOURCE\"; __fzps_list cmd '$user_filter')+change-prompt(processes [cmd]: )"
   )
 
   [[ -n "$selected" ]] || return 0

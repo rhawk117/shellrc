@@ -69,7 +69,6 @@ __source_shellrc_files() {
     }
 
     file_path="$RC_LIBRARY/$file"
-    echo "$file_path"
 
     [[ -e "$file_path" ]] || {
       printf '[warn] shellrc file not found: %s\n' "$file_path" >&2
@@ -238,15 +237,14 @@ __define_aliases() {
 
   # git
   alias gs='git status --short'
-  alias gst='git status'
+  alias gstatus='git status'
   alias gaa='git add --all'
   alias gc='git checkout'
   alias glog='git log --graph --oneline --decorate'
   alias gpull='git pull'
-  alias gps='git push'
+  alias gpush='git push'
   alias gcommit='git commit -m'
-  alias gd='git diff'
-  alias gds='git diff --staged'
+  alias gdiff='git diff'
 }
 
 unalias catrc editrc reload bashrc zshrc 2>/dev/null || true

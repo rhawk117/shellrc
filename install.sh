@@ -189,12 +189,10 @@ make_managed_block() {
 
   cat <<EOF
 $MANAGED_BEGIN
-# Source installed shared shell config.
 export SHELLRC_REPO=$repo_q
 export SHELLRC_ENTRY=$entry_q
 export SHELLRC_LIBRARY=$lib_q
 
-# Compatibility with .shellrc.sh expecting RC_LIBRARY.
 export RC_LIBRARY="\$SHELLRC_LIBRARY"
 
 [[ -r "\$SHELLRC_ENTRY" ]] && source "\$SHELLRC_ENTRY"
