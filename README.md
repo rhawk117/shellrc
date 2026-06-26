@@ -115,6 +115,15 @@ Sets safe defaults for:
 - pager/diff/tree/ip colorized aliases when available
 - clipboard aliases (`clip`, `copy`) mapped to host-appropriate command
 
+#### bat / batcat aliases (when `bat` or `batcat` is installed)
+
+- `cat` → `bat --paging=never`
+- `rawcat` → raw `cat` (bypass bat)
+- `ccat` → `bat --style=plain --paging=never` (no decorations)
+- `b` → `bat`
+- `bn` → `bat --paging=never`
+- `bl` → `bat --paging=always`
+
 #### Git aliases
 
 - `gs`, `gstatus`, `gaa`, `gc`, `glog`, `gpull`, `gpush`, `gcommit`, `gdiff`
@@ -123,17 +132,21 @@ Sets safe defaults for:
 
 - logging helpers: `rc_debug`, `rc_info`, `rc_success`, `rc_warn`, `rc_error`, `rc_fatal`
 - Git workflow:
-  - `gitsnap` add/commit with optional sync (`--sync`) and push (`--push`)
-  - `gitfeat` create a feature branch from a base branch
+  - `gitsnap [-m <msg>] [-s|--sync] [-p|--push] [-a|--add <path>]` — add/commit with optional pull and push; `-a` controls what gets staged (default: `.`)
+  - `gitfeat -b <new-branch> -r <base-branch>` — create a feature branch synced from a base branch
 - navigation/search:
   - `upby <n>` move up multiple directories
-  - `rglob` find by name/type
-  - `gr` recursive grep
-  - `gri` case-insensitive recursive grep
+  - `rglob [-p <pattern>] [-t <type>]` find by name/type
+  - `gr <pattern> [dir]` recursive grep
+  - `gri <pattern> [dir]` case-insensitive recursive grep
 - bookmarks:
-  - `bkmark path|go|show` save, revisit, and inspect a bookmarked directory
+  - `bkmark` (no arg) or `bkmark path|-p` — bookmark current directory
+  - `bkmark go|-g` — cd to bookmarked directory
+  - `bkmark show|-s` — print bookmarked path
 
 ### FZF command suite (`.fzf_tools.sh`)
+
+**`FZ_IGNORE_DIRS`** — space-separated list of directory names pruned from all `fzf` searches (default: `.git node_modules .svn .hg __pycache__` and common build dirs). Override to customise.
 
 - discovery: `fzls`, `fzinfo`, `fzgrep`, `fzg`
 - open/edit: `fznano`, `fzless`, `fzmore`, `fzvs`
@@ -143,6 +156,15 @@ Sets safe defaults for:
 - shell helpers: `fzcomp`, `fzh`, `fzclip`
 - compare: `fzdiff`
 - docs: `fzhelp`, `fzhelp <command>`
+
+#### Notable options
+
+| Command | Key options |
+| --- | --- |
+| `fzgrep` / `fzg` | `-i` case-insensitive · `--vs` open match in VS Code · `--hidden` include hidden files · `--no-ignore` disable `FZ_IGNORE_DIRS` |
+| `fzps` | `--sort <field>` · `-u <user>` · `--pid-only` print PID · `--cmd-only` print command; interactive: `ctrl-c/m/p/o/u/t/a` to re-sort |
+| `fzvs` | `-f/--files` select file instead of directory |
+| `fzls` | `-t <type>` · `-a` include hidden · `-l <n>` preview lines |
 
 Most commands include rich preview panes and explicit help via `--help`.
 
