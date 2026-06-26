@@ -13,13 +13,26 @@ from pathlib import Path
 from typing import ClassVar, Self
 from zipfile import ZIP_DEFLATED, ZipFile, ZipInfo
 
-SCRIPT_DIRECTORY = Path(__file__).resolve().parent
-USER_HOME = Path.home()
+logger = logging.getLogger(__name__)
 
-LOG = logging.getLogger('shellrc-installer')
 
-SOURCE_BLOCK_OPEN = '# >>> shellrc >>>'
-SOURCE_BLOCK_CLOSE = '# <<< shellrc <<<'
+class constant:  # noqa: N801
+    SOURCE_BLOCK_OPEN: str = '# >>> shellrc >>>'
+    SOURCE_BLOCK_CLOSE: str = '# <<< shellrc <<<'
+    LIBRARY_DIRNAME: str = '.shellrc.d'
+    FILE_NAME: str = '.shellrc.sh'
+    BACKUP_DIRNAME: ClassVar[str] = '.shellrc.bak.d'
+    HASH_FILENAME: ClassVar[str] = '.shellrc.backup.sha256'
+    ZIP_PREFIX: ClassVar[str] = 'shellrc_backup_'
+    ZIP_MAGIC_ATTR = 0o644 << 16
+    ZIP_TIMESTAMP: ClassVar[tuple[int, int, int, int, int, int]] = (
+        1980,
+        1,
+        1,
+        0,
+        0,
+        0,
+    )
 
 
 class MaxLevelFilter(logging.Filter):
@@ -31,7 +44,7 @@ class MaxLevelFilter(logging.Filter):
         return record.levelno <= self.max_level
 
 
-def configure_logging(verbose: bool = False) -> None:
+def configure_logging(*, verbose: bool = False) -> None:
     stdout_handler = logging.StreamHandler(sys.stdout)
     stdout_handler.setLevel(logging.DEBUG)
     stdout_handler.addFilter(MaxLevelFilter(logging.INFO))
@@ -48,12 +61,6 @@ def configure_logging(verbose: bool = False) -> None:
 
 
 def file_sha256(path: Path) -> str:
-    """
-    Hash the exact bytes of a file.
-
-    For zip files, this answers:
-        "Are these two zip files byte-for-byte identical?"
-    """
     hasher = hashlib.sha256()
 
     with path.open('rb') as file:
@@ -64,14 +71,6 @@ def file_sha256(path: Path) -> str:
 
 
 def zip_content_hash(zip_path: Path, *, ignore: set[str] | None = None) -> str:
-    """
-    Hash zip contents independent of zip container metadata.
-
-    This answers:
-        "Do these zips contain the same file names with the same file contents?"
-
-    It ignores timestamps, compression differences, ordering, comments, etc.
-    """
     ignored = ignore or set()
     hasher = hashlib.sha256()
 
@@ -94,15 +93,15 @@ def zip_content_hash(zip_path: Path, *, ignore: set[str] | None = None) -> str:
 def zip_contents_equal(left: Path, right: Path) -> bool:
     return zip_content_hash(left) == zip_content_hash(right)
 
-
+@dataclass(slots=True)
 class ShellrcPath:
-    LIBRARY_DIRNAME: ClassVar[str] = '.shellrc.d'
-    FILE_NAME: ClassVar[str] = '.shellrc.sh'
+    parent_dir: Path
+    shellrc_dir: Path = field(init=False)
+    shellrc_file: Path = field(init=False)
 
-    def __init__(self, parent_dir: Path) -> None:
-        self.parent_dir = parent_dir
-        self.shellrc_dir = parent_dir / self.LIBRARY_DIRNAME
-        self.shellrc_file = parent_dir / self.FILE_NAME
+    def __post_init__(self) -> None:
+        self.shellrc_dir = self.parent_dir / constant.LIBRARY_DIRNAME
+        self.shellrc_file = self.parent_dir / constant.FILE_NAME
 
     def any_exist(self) -> bool:
         return self.shellrc_file.exists() or self.shellrc_dir.exists()
@@ -112,11 +111,15 @@ class ShellrcPath:
 
     def must_exist(self) -> None:
         if not self.shellrc_file.is_file():
-            LOG.error('expected shellrc entrypoint to be a file: %s', self.shellrc_file)
+            logger.error(
+                'expected shellrc entrypoint to be a file: %s', self.shellrc_file
+            )
             raise SystemExit(1)
 
         if not self.shellrc_dir.is_dir():
-            LOG.error('expected shellrc library to be a directory: %s', self.shellrc_dir)
+            logger.error(
+                'expected shellrc library to be a directory: %s', self.shellrc_dir
+            )
             raise SystemExit(1)
 
     def iter_files(self) -> Iterator[Path]:
@@ -132,11 +135,6 @@ class ShellrcPath:
             yield rel, path.read_bytes()
 
     def compute_hash(self) -> str:
-        """
-        Hash the logical shellrc payload.
-
-        This is better than hashing a zip because it ignores zip metadata.
-        """
         hasher = hashlib.sha256()
 
         for rel, data in self.iter_backup_members():
@@ -161,30 +159,18 @@ class ShellrcPath:
                 dirs_exist_ok=True,
             )
 
-
+@dataclass(slots=True)
 class ShellrcBackupManager:
-    BACKUP_DIRNAME: ClassVar[str] = '.shellrc.bak.d'
-    HASH_FILENAME: ClassVar[str] = '.shellrc.backup.sha256'
-    ZIP_PREFIX: ClassVar[str] = 'shellrc_backup_'
+    backup_dir: Path
 
-    ZIP_TIMESTAMP: ClassVar[tuple[int, int, int, int, int, int]] = (
-        1980,
-        1,
-        1,
-        0,
-        0,
-        0,
-    )
-
-    def __init__(self, backup_dir: Path) -> None:
-        self.backup_dir = backup_dir
+    def __post_init__(self) -> None:
         self.backup_dir.mkdir(parents=True, exist_ok=True)
 
     @property
     def backup_archives(self) -> Iterator[Path]:
         yield from sorted(
             path
-            for path in self.backup_dir.glob(f'{self.ZIP_PREFIX}*.zip')
+            for path in self.backup_dir.glob(f'{constant.ZIP_PREFIX}*.zip')
             if path.is_file()
         )
 
@@ -195,7 +181,7 @@ class ShellrcBackupManager:
     def new_backup_archive(self, now: datetime | None = None) -> Path:
         now = now or datetime.now(UTC)
         timestamp = now.strftime('%Y%m%dT%H%M%SZ')
-        return self.backup_dir / f'{self.ZIP_PREFIX}{timestamp}.zip'
+        return self.backup_dir / f'{constant.ZIP_PREFIX}{timestamp}.zip'
 
     def read_backup_hash(self, archive: Path) -> str | None:
         if not archive.is_file():
@@ -203,7 +189,7 @@ class ShellrcBackupManager:
 
         with ZipFile(archive, 'r') as zf:
             try:
-                return zf.read(self.HASH_FILENAME).decode('utf-8').strip()
+                return zf.read(constant.HASH_FILENAME).decode('utf-8').strip()
             except KeyError:
                 return None
 
@@ -222,30 +208,27 @@ class ShellrcBackupManager:
 
     def _zip_info(self, name: str) -> ZipInfo:
         info = ZipInfo(name)
-        info.date_time = self.ZIP_TIMESTAMP
+        info.date_time = constant.ZIP_TIMESTAMP
         info.compress_type = ZIP_DEFLATED
-        info.external_attr = 0o644 << 16
+        info.external_attr = constant.ZIP_MAGIC_ATTR
         return info
 
     def create(self, target: ShellrcPath, target_hash: str | None = None) -> Path:
         target_hash = target_hash or target.compute_hash()
         archive = self.new_backup_archive()
 
-        with ZipFile(
+        zf = ZipFile(
             archive,
             mode='w',
             compression=ZIP_DEFLATED,
             compresslevel=9,
-        ) as zf:
-            zf.writestr(
-                self._zip_info(self.HASH_FILENAME),
-                f'{target_hash}\n',
-            )
-
+        )
+        with zf:
+            zf.writestr(self._zip_info(constant.HASH_FILENAME), f'{target_hash}\n')
             for rel, data in target.iter_backup_members():
                 zf.writestr(self._zip_info(rel), data)
 
-        LOG.info('created backup: %s', archive)
+        logger.info('created backup: %s', archive)
         return archive
 
 
@@ -320,37 +303,34 @@ class UserRCFile:
 def edit_user_rc_file(
     args: CLIArguments,
     rc_file: UserRCFile,
-    *,
-    open_delim: str = SOURCE_BLOCK_OPEN,
-    close_delim: str = SOURCE_BLOCK_CLOSE,
 ) -> bool:
     rc_lines = set(rc_file.readlines())
 
     if args.no_source:
-        LOG.info('skipping rc file modification because --no-source was set')
+        logger.info('skipping rc file modification because --no-source was set')
         return False
 
-    if open_delim in rc_lines or close_delim in rc_lines:
-        LOG.info('the existing rc file was not modified: %s', rc_file.dotfile)
+    if constant.SOURCE_BLOCK_OPEN in rc_lines or constant.SOURCE_BLOCK_CLOSE in rc_lines:
+        logger.info('the existing rc file was not modified: %s', rc_file.dotfile)
         return False
 
-    entry = f'$HOME/{ShellrcPath.FILE_NAME}'
+    entry = f'$HOME/{constant.FILE_NAME}'
 
     rc_file.append_lines(
         '',
         '# -- added by shellrc --',
-        open_delim,
+        constant.SOURCE_BLOCK_OPEN,
         f'[ -f "{entry}" ] && source "{entry}"',
-        close_delim,
+        constant.SOURCE_BLOCK_CLOSE,
         '# -- added by shellrc --',
     )
 
-    LOG.info('added shellrc source block to: %s', rc_file.dotfile)
+    logger.info('added shellrc source block to: %s', rc_file.dotfile)
     return True
 
 
 def installer(args: CLIArguments, user_rc: UserRCFile) -> bool:
-    source_shellrc = ShellrcPath(SCRIPT_DIRECTORY)
+    source_shellrc = ShellrcPath(Path.cwd())
     source_shellrc.must_exist()
 
     existing_shellrc = ShellrcPath(user_rc.parent_dir)
@@ -364,16 +344,11 @@ def installer(args: CLIArguments, user_rc: UserRCFile) -> bool:
             force=args.force_backup,
         ):
             backup_manager.create(existing_shellrc, existing_hash)
-        else:
-            LOG.info('backup skipped because latest backup already matches current files')
 
-    LOG.info('installing shellrc into: %s', user_rc.parent_dir)
+    logger.info('installing shellrc into: %s', user_rc.parent_dir)
     source_shellrc.copy_to(user_rc.parent_dir)
 
-    return edit_user_rc_file(
-        args=args,
-        rc_file=user_rc,
-    )
+    return edit_user_rc_file(args=args, rc_file=user_rc)
 
 
 def create_cli_parser() -> argparse.ArgumentParser:
@@ -393,7 +368,7 @@ def create_cli_parser() -> argparse.ArgumentParser:
         type=Path,
         dest='backup_path',
         help='where backups live',
-        default=USER_HOME / ShellrcBackupManager.BACKUP_DIRNAME,
+        default=(Path.home() / constant.BACKUP_DIRNAME),
     )
 
     backup_group.add_argument(
@@ -433,33 +408,31 @@ def run_tool() -> int:
         parser = create_cli_parser()
         arguments = CLIArguments.from_parser(parser)
 
-        configure_logging(arguments.verbose)
+        configure_logging(verbose=arguments.verbose)
 
         user_rc = UserRCFile.auto()
 
-        LOG.info('targeting %s rc file: %s', user_rc.user_shell, user_rc.dotfile)
+        logger.info('targeting %s rc file: %s', user_rc.user_shell, user_rc.dotfile)
 
         rc_file_changed = installer(arguments, user_rc)
 
         if rc_file_changed:
-            LOG.info('entrypoint added to: %s', user_rc.dotfile)
+            logger.info('entrypoint added to: %s', user_rc.dotfile)
         else:
-            LOG.info('existing rc file was not modified: %s', user_rc.dotfile)
-
-        LOG.info('installation complete, reload your terminal')
-    except SystemExit:
-        raise
+            logger.info('existing rc file was not modified: %s', user_rc.dotfile)
     except Exception:
-        LOG.exception('installation failed')
+        logger.exception('installation failed')
         return 1
 
+    logger.info('installation complete, reload your terminal')
     return 0
 
 
 def main() -> int:
+    script_directory = Path(__file__).resolve().parent
     user_cwd = Path.cwd()
     try:
-        os.chdir(SCRIPT_DIRECTORY)
+        os.chdir(script_directory)
         return run_tool()
     finally:
         os.chdir(user_cwd)
