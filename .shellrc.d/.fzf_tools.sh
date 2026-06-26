@@ -8,10 +8,20 @@
 # Optional:
 #   bat, code, lsof, pstree, pwdx
 
+
+if ! command -v fzf >/dev/null 2>&1; then
+  if [[ -n "${ZSH_VERSION:-}" && -f "$HOME/.fzf.zsh" ]]; then
+    source "$HOME/.fzf.zsh"
+  elif [[ -f "$HOME/.fzf.bash" ]]; then
+    source "$HOME/.fzf.bash"
+  fi
+fi
+
+
+
 _FZTOOLS_SOURCE="${BASH_SOURCE[0]:-$0}"
 export _FZTOOLS_SOURCE
 
-# Directories pruned from all file/dir searches. Set before sourcing to override.
 : "${FZ_IGNORE_DIRS:=.git node_modules .svn .hg __pycache__ .cache .tox .mypy_cache .pytest_cache .venv venv dist build .next .nuxt target}"
 export FZ_IGNORE_DIRS
 
@@ -270,7 +280,7 @@ Options:
 
 Examples:
   fzinfo
-  fzinfo -n '*.py'
+  fzinfo -n '*.py'l
   fzinfo -t d
   fzinfo -d ./backend
 EOF

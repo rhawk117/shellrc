@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-# ~/.shellrc.d/.shell_utils.sh
+# .shellrc.d/.shell_utils.sh
 
 # Exports
 # -------
@@ -144,7 +144,7 @@ gitfeat() {
   while [[ $# -gt 0 ]]; do
     case "$1" in
       -h|--help)
-        rc_info "Usage: fcheckout -b <new-branch-name> -r <base-branch>"
+        rc_info "Usage: gitfeat -b <new-branch-name> -r <base-branch>"
         return 0
         ;;
       -b|--branch)
@@ -174,7 +174,7 @@ gitfeat() {
 
   if [ -z "$new_name" ] || [ -z "$base_branch" ]; then
     rc_error "Both parameters are required"
-    rc_info "[usage]: fcheckout -b <new-branch-name> -r <base-branch>"
+    rc_info "[usage]: gitfeat -b <new-branch-name> -r <base-branch>"
     return 1
   fi
 
@@ -271,7 +271,7 @@ bkmark() {
       do_show
       ;;
     *)
-      echo "Usage: bkmark {path|go|show}"
+      rc_info "Usage: bkmark {path|go|show}"
       return 1
       ;;
   esac

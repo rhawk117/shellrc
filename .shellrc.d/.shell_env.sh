@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-
+# .shellrc.d/.shell_env.sh
 # common Environment Variables & Configuration Options
 # may vary by platform
 
@@ -24,5 +24,6 @@ export PYTHONDONTWRITEBYTECODE="${PYTHONDONTWRITEBYTECODE:-1}"
 export FZF_DEFAULT_OPTS="${FZF_DEFAULT_OPTS:---height=80% --border --info=inline --layout=reverse --preview-window=right:60%:wrap}"
 export BAT_THEME="${BAT_THEME:-ansi}"
 export RIPGREP_CONFIG_PATH="${RIPGREP_CONFIG_PATH:-$HOME/.config/ripgrep/config}"
+
 
 export PATH
